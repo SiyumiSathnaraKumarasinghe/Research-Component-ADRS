@@ -1,0 +1,11 @@
+Model,Test_Year,Train_Records,Test_Records,Accuracy,Macro_F1,HIGH_Count,MEDIUM_Count,LOW_Count
+Random Forest,2018,258,48,0.438,0.428,19,18,11
+Random Forest,2019,264,45,0.378,0.389,8,21,16
+Random Forest,2021,275,31,0.323,0.244,6,18,7
+Random Forest,2022,270,36,0.722,0.532,7,13,16
+XGBoost,2018,258,48,0.375,0.372,19,18,11
+XGBoost,2019,264,45,0.356,0.345,8,21,16
+XGBoost,2021,275,31,0.484,0.356,6,18,7
+XGBoost,2022,270,36,0.639,0.466,7,13,16
+Random Forest,Mean,--,--,0.465,0.398,--,--,--
+XGBoost,Mean,--,--,0.463,0.385,--,--,--

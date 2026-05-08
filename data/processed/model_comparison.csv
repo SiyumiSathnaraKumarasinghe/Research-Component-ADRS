@@ -1,0 +1,13 @@
+Model,Test year,Precision,Recall,F1,PR-AUC,ROC-AUC
+Seasonal Naive,2022,-,0.167,0.179,-,-
+Logistic Regression,2022,0.206,0.583,0.304,0.279,0.701
+Random Forest,2022,0.333,0.028,0.051,0.239,0.681
+XGBoost,2022,0.25,0.139,0.179,0.258,0.69
+Seasonal Naive,2023,-,0.25,0.125,-,-
+Logistic Regression,2023,0.092,0.667,0.162,0.236,0.758
+Random Forest,2023,0.333,0.083,0.133,0.22,0.84
+XGBoost,2023,0.273,0.5,0.353,0.203,0.764
+Seasonal Naive,2024,-,0.0,0.0,-,-
+Logistic Regression,2024,0.0,0.0,0.0,0.0,
+Random Forest,2024,0.0,0.0,0.0,0.0,
+XGBoost,2024,0.0,0.0,0.0,0.0,

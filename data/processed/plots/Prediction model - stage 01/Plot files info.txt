@@ -1,0 +1,15 @@
+Plot Files
+
+File                                                                Description
+
+A2_class_balance.png                                           Class imbalance bar chart
+A3_outbreak_distribution.png                                   Outbreaks by district/month/season
+A4_correlation_heatmap.png                                     Feature correlation matrix 
+model_comparison_chart.png                                     Model comparison bar chartsf1_per_split.png
+F1 per test yearactual_vs_predicted_2024.png                   Before improvement heatmap
+outbreak_probability_2024.png                                  Probability heatmap 
+district_risk_ranking_2024.png                                 District risk bar chart
+confusion_matrix_2024.png                                      Before improvement confusion matrix
+threshold_analysis.png                                         Precision-recall threshold curves
+final_actual_vs_predicted.png                                  Final model heatmap
+final_model_confusion_matrix.png                               Final model confusion matrix

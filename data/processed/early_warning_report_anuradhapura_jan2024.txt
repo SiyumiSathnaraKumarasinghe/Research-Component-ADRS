@@ -1,0 +1,20 @@
+
+EARLY WARNING REPORT
+=====================
+District : Anuradhapura
+Month    : January 2024
+
+STAGE 1 — Outbreak Risk
+Probability  : 90%
+Risk Level   : HIGH
+
+Top contributing factors:
++ cos_month : +0.83 (increases risk)
++ rain_lag2 : +0.51 (increases risk)
++ humidity : +0.46 (increases risk)
+- r3h : -0.82 (decreases risk)
+
+STAGE 2 — Severity Estimate
+Predicted Severity : MEDIUM
+
+RECOMMENDATION: Deploy targeted surveillance and vaccination programs in high-risk areas.

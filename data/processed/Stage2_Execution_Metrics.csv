@@ -1,0 +1,42 @@
+Metric,Value,Unit
+Execution Date,2026-05-08,Date
+Total Cells Executed,15,Count
+Cells Successful,15,Count
+Cells Failed,0,Count
+XGBoost Available,True,Boolean
+DAPH Records,115,Count
+Unique Districts,23,Count
+Year Range Start,2017,Year
+Year Range End,2024,Year
+Severity Score Mean,138.629,Score
+Severity Score Std,377.405,Score
+Severity Score Min,0.083,Score
+Severity Score Max,2997.333,Score
+LOW Threshold,50,Score
+MEDIUM Threshold,300,Score
+Severity LOW Count,72,Count
+Severity MEDIUM Count,31,Count
+Severity HIGH Count,12,Count
+Feature Records Total,2400,Count
+Outbreak Records,306,Count
+Outbreak Records with Severity,306,Count
+Match Rate,100,%
+Outbreak LOW,172,Count
+Outbreak MEDIUM,94,Count
+Outbreak HIGH,40,Count
+Features Selected,21,Count
+LOYO Test Years,4,Count
+Random Forest Mean F1,0.398,Score
+Random Forest Mean Accuracy,0.465,Score
+XGBoost Mean F1,0.385,Score
+XGBoost Mean Accuracy,0.463,Score
+Best Model,Random Forest,Text
+2024 Predictions LOW,45,Count
+2024 Predictions MEDIUM,26,Count
+2024 Predictions HIGH,7,Count
+2024 Total Predictions,78,Count
+Top Feature,buffalo_density,Text
+Top Feature Importance,0.120,Score
+Model File Size,1528.5,KB
+Artifacts Saved,4,Count
+Visualizations Generated,2,Count
