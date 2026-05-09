@@ -31,7 +31,7 @@ This report presents comprehensive SHAP (SHapley Additive exPlanations) interpre
 
 ### Feature Importance Rankings
 
-| Rank | Feature | Mean |SHAP| Interpretation |
+| Rank | Feature | Mean \|SHAP\| | Interpretation |
 |------|---------|-------------|---|
 | 1 | **r3h** | 0.5930 | 3-hour relative humidity - strongest weather predictor |
 | 2 | **cos_month** | 0.5351 | Temporal pattern (cosine-encoded) captures seasonal outbreak cycles |
@@ -96,7 +96,7 @@ This report presents comprehensive SHAP (SHapley Additive exPlanations) interpre
 
 ### Feature Importance Rankings
 
-| Rank | Feature | Mean |SHAP| Interpretation |
+| Rank | Feature | Mean \|SHAP\| | Interpretation |
 |------|---------|-------------|---|
 | 1 | **buffalo_density** | 0.0536 | Buffalo concentration - species-specific severity driver |
 | 2 | **lat** | 0.0482 | Latitude - geographic severity variation |
@@ -251,7 +251,7 @@ Five publication-quality PNG plots saved to `plots/08_shap/`:
    - Shows feature-by-feature impact on outbreak probability
 
 2. **stage1_shap_importance.png** (12×8 inch, 150 DPI)
-   - Bar chart: Top 22 Stage 1 features ranked by mean |SHAP|
+   - Bar chart: Top 22 Stage 1 features ranked by mean \|SHAP\|
    - Clear hierarchy of predictor importance
 
 3. **stage1_shap_waterfall_anuradhapura_jan2024.png** (12×8 inch, 150 DPI)
@@ -259,7 +259,7 @@ Five publication-quality PNG plots saved to `plots/08_shap/`:
    - Base value → individual contributions → final prediction
 
 4. **stage2_shap_importance.png** (12×8 inch, 150 DPI)
-   - Bar chart: Top 21 Stage 2 features by mean |SHAP|
+   - Bar chart: Top 21 Stage 2 features by mean \|SHAP\|
    - Severity-specific feature ranking
 
 5. **stage2_shap_summary.png** (12×8 inch, 150 DPI)
