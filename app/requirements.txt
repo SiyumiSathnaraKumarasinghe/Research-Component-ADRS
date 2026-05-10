@@ -6,3 +6,4 @@ xgboost
 matplotlib
 joblib
 shap
+plotly

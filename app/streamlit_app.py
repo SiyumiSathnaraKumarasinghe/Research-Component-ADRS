@@ -7,12 +7,14 @@ import joblib
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
+import plotly.graph_objects as go
 
 
 st.set_page_config(
     page_title="FMD Early Warning System — Sri Lanka",
-    page_icon="cow",
+    page_icon="🐄",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 
@@ -245,6 +247,13 @@ def compute_climatological_forecast(
             risk_level = "MEDIUM"
         else:
             risk_level = "LOW"
+
+        if risk_level == "HIGH":
+            risk_accent = "#e63946"
+        elif risk_level == "MEDIUM":
+            risk_accent = "#f4a261"
+        else:
+            risk_accent = "#2a9d8f"
         
         # Run Stage 2 if probability >= 0.35
         severity = "No Outbreak Predicted"
@@ -272,22 +281,15 @@ def render_forecast_table(forecast_df: pd.DataFrame) -> None:
     """
     Render forecast table with color coding for risk levels.
     """
-    
-    def risk_color(risk_level: str) -> str:
-        if risk_level == "HIGH":
-            return "background-color: #ffcccc"  # Light red
-        elif risk_level == "MEDIUM":
-            return "background-color: #ffe6cc"  # Light orange
-        else:
-            return "background-color: #ccffcc"  # Light green
-    
-    # Apply styling to Risk Level column
-    styled_df = forecast_df.style.map(
-        lambda x: risk_color(x) if isinstance(x, str) else "",
-        subset=["Risk Level"]
-    )
-    
-    st.dataframe(styled_df, width='stretch', hide_index=True)
+
+    def row_style(row: pd.Series) -> str:
+        if row.get("Risk Level") == "HIGH":
+            return "background-color: #ffe5e7;"
+        if row.get("Risk Level") == "MEDIUM":
+            return "background-color: #fff1e3;"
+        return "background-color: #e8fbf4;"
+
+    render_html_table(forecast_df, row_style_func=row_style)
 
 
 def generate_forecast_csv(forecast_df: pd.DataFrame) -> bytes:
@@ -350,9 +352,9 @@ Currently showing forecast for: **{target_month_name} 2025** (next calendar mont
     medium_count = len(forecast_df[forecast_df["Risk Level"] == "MEDIUM"])
     low_count = len(forecast_df[forecast_df["Risk Level"] == "LOW"])
     
-    col1.metric("🔴 HIGH Risk Districts", high_count)
-    col2.metric("🟠 MEDIUM Risk Districts", medium_count)
-    col3.metric("🟢 LOW Risk Districts", low_count)
+    render_stat_card("🔴 HIGH Risk Districts", str(high_count), "#e63946")
+    render_stat_card("🟠 MEDIUM Risk Districts", str(medium_count), "#f4a261")
+    render_stat_card("🟢 LOW Risk Districts", str(low_count), "#2a9d8f")
     
     # Download button
     csv_data = generate_forecast_csv(forecast_df)
@@ -365,42 +367,470 @@ Currently showing forecast for: **{target_month_name} 2025** (next calendar mont
     )
 
 
-def main() -> None:
-    st.sidebar.title("FMD Risk Prediction")
-    st.sidebar.markdown("Select a district and time period to predict outbreak risk.")
-
-    selected_district = st.sidebar.selectbox("District", DISTRICTS)
-    selected_month_name = st.sidebar.selectbox("Month", MONTH_NAMES)
-    month_num = MONTH_NAMES.index(selected_month_name) + 1
-    selected_year = st.sidebar.slider("Year", min_value=2017, max_value=2024, value=2024, step=1)
-
-    predict_clicked = st.sidebar.button("Predict FMD Risk", width='stretch', type="primary")
-
-    st.title("FMD Early Warning System")
-    st.markdown("Climate-Informed Seasonal Disease Forecasting for Sri Lanka")
-    st.divider()
-
-    try:
-        df = load_data()
-        models = load_models()
-        stage1_shap_df, stage2_shap_df = load_shap_values()
-        bootstrap_intervals_df = load_bootstrap_intervals()
-    except Exception as exc:
-        st.error(f"Failed to load required files: {exc}")
-        return
-
-    # Create tabs
-    tab1, tab2 = st.tabs(["🔍 Single District Prediction", "🗺️ January 2025 Forecast — All Districts"])
+def inject_custom_css() -> None:
+    """Inject global CSS styling for professional design language."""
+    css = """
+    <style>
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.7); }
+        70% { box-shadow: 0 0 0 20px rgba(230, 57, 70, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(230, 57, 70, 0); }
+    }
     
-    # ─── TAB 1: Single District Prediction ──────────────────────────────────────
-    with tab1:
-        if not predict_clicked:
-            st.info("Choose district/month/year from the sidebar and click Predict FMD Risk.")
-            return
+    * {
+        margin: 0;
+        padding: 0;
+    }
+    
+    body, [data-testid="stAppViewContainer"] {
+        background-color: #f0f4f8;
+    }
+    
+    [data-testid="stSidebar"] {
+        background-color: #0a1628 !important;
+    }
+    
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2 {
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stSidebar"] button {
+        background-color: #0a1628 !important;
+        color: #ffffff !important;
+        border: 1px solid #00b36b !important;
+    }
+    
+    [data-testid="stSidebar"] button:hover {
+        background-color: #00b36b !important;
+        color: #0a1628 !important;
+    }
+    
+    [data-testid="stMetric"] {
+        background-color: #ffffff;
+        padding: 16px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        border-left: 4px solid #00b36b;
+    }
+    
+    .metric-high {
+        border-left-color: #e63946 !important;
+    }
+    
+    .metric-medium {
+        border-left-color: #f4a261 !important;
+    }
+    
+    .metric-low {
+        border-left-color: #2a9d8f !important;
+    }
+    
+    .header-banner {
+        background: linear-gradient(90deg, #0a1628 0%, #1a4d2e 100%);
+        color: #ffffff;
+        padding: 40px 20px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+    }
+    
+    .section-header {
+        color: #0a1628;
+        font-weight: 700;
+        border-bottom: 3px solid #00b36b;
+        padding-bottom: 12px;
+        margin-bottom: 20px;
+    }
+    
+    .risk-badge-high {
+        display: inline-block;
+        background-color: #e63946;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 24px;
+        font-weight: bold;
+        font-size: 16px;
+        animation: pulse 2s infinite;
+    }
+    
+    .risk-badge-medium {
+        display: inline-block;
+        background-color: #f4a261;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 24px;
+        font-weight: bold;
+        font-size: 16px;
+    }
+    
+    .risk-badge-low {
+        display: inline-block;
+        background-color: #2a9d8f;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 24px;
+        font-weight: bold;
+        font-size: 16px;
+    }
+    
+    .card-content {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        border-left: 4px solid #00b36b;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        margin-bottom: 16px;
+    }
+    
+    .card-finding {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        border-top: 4px solid;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        margin-bottom: 16px;
+    }
+    
+    .finding-blue { border-top-color: #0a1628; }
+    .finding-green { border-top-color: #00b36b; }
+    .finding-red { border-top-color: #e63946; }
+    
+    .recommendation-high {
+        background-color: #fff0f1;
+        border-left: 6px solid #e63946;
+    }
+    
+    .recommendation-medium {
+        background-color: #fff5f0;
+        border-left: 6px solid #f4a261;
+    }
+    
+    .recommendation-low {
+        background-color: #f0fef8;
+        border-left: 6px solid #2a9d8f;
+    }
+    
+    .nav-button {
+        width: 100%;
+        padding: 12px 16px;
+        background-color: transparent;
+        color: #ffffff;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-radius: 8px;
+        margin-bottom: 8px;
+        text-align: left;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .nav-button:hover {
+        background-color: #00b36b;
+        border-color: #00b36b;
+        color: #0a1628;
+    }
+    
+    .nav-button-active {
+        background-color: #00b36b;
+        border-color: #00b36b;
+        color: #0a1628;
+        font-weight: 700;
+    }
+    
+    .pipeline-step {
+        background-color: #ffffff;
+        padding: 12px 16px;
+        border-radius: 8px;
+        text-align: center;
+        font-size: 12px;
+        border: 2px solid #00b36b;
+        flex: 1;
+    }
+    
+    .pipeline-arrow {
+        text-align: center;
+        font-size: 18px;
+        color: #00b36b;
+        font-weight: bold;
+    }
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
 
+
+def init_session_state() -> None:
+    """Initialize session state for multi-page navigation."""
+    if "page" not in st.session_state:
+        st.session_state.page = "Overview"
+
+
+def render_sidebar() -> None:
+    """Render custom sidebar with navigation and branding."""
+    st.sidebar.markdown(
+        """
+        <div style='padding: 20px; text-align: center;'>
+            <div style='font-size: 32px; margin-bottom: 8px;'>🐄</div>
+            <h2 style='color: #ffffff; font-size: 18px; margin-bottom: 4px;'>FMD Early Warning</h2>
+            <p style='color: #00b36b; font-size: 12px; margin-bottom: 16px;'>Sri Lanka — DAPH</p>
+            <hr style='border: none; border-top: 2px solid #00b36b; margin: 12px 0;'>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    
+    # Navigation buttons
+    pages = ["🏠 Overview", "🎯 Risk Prediction", "🗺️ District Forecast", "📊 Model Insights"]
+    
+    for page_label in pages:
+        page_name = page_label.split(" ", 1)[1] if " " in page_label else page_label
+        is_active = st.session_state.page == page_name
+        
+        button_class = "nav-button-active" if is_active else "nav-button"
+        button_html = f'<button class="{button_class}">{page_label}</button>'
+        
+        if st.sidebar.button(page_label, key=f"nav_{page_name}", use_container_width=True):
+            st.session_state.page = page_name
+            st.rerun()
+    
+    st.sidebar.markdown("<hr>", unsafe_allow_html=True)
+    st.sidebar.markdown(
+        """
+        <div style='padding: 12px; font-size: 11px; color: #888888; text-align: center;'>
+            <p style='margin: 4px 0;'>Data: DAPH · CHIRPS · NASA · FAO</p>
+            <p style='margin: 4px 0;'>University of Moratuwa · 2026</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_header_banner(title: str, subtitle: str = "", tag: str = "") -> None:
+    """Render a gradient header banner."""
+    html = f"""
+    <div class='header-banner'>
+        <h1 style='margin: 0; font-size: 36px; font-weight: 700;'>{title}</h1>
+        {f'<p style="margin: 8px 0 0 0; font-size: 16px; opacity: 0.9;">{subtitle}</p>' if subtitle else ''}
+        {f'<p style="margin: 8px 0 0 0; font-size: 12px; opacity: 0.7; color: #00b36b;">{tag}</p>' if tag else ''}
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_section_header(title: str) -> None:
+    """Render a section header with green underline."""
+    st.markdown(f"<h2 class='section-header'>{title}</h2>", unsafe_allow_html=True)
+
+
+def render_stat_card(label: str, value: str, accent: str = "#00b36b") -> None:
+    """Render a stat card that does not depend on st.metric."""
+    st.markdown(
+        f"""
+        <div class='card-content' style='border-left-color: {accent}; margin-bottom: 0;'>
+            <div style='font-size: 12px; color: #5c677d; margin-bottom: 6px;'>{label}</div>
+            <div style='font-size: 26px; font-weight: 800; color: #0a1628;'>{value}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_html_table(df: pd.DataFrame, row_style_func=None) -> None:
+    """Render a simple HTML table to avoid Streamlit dataframe widgets."""
+    headers = "".join(f"<th>{col}</th>" for col in df.columns)
+    rows = []
+    for _, row in df.iterrows():
+        style = row_style_func(row) if row_style_func else ""
+        cells = "".join(f"<td>{row[col]}</td>" for col in df.columns)
+        rows.append(f"<tr style='{style}'>{cells}</tr>")
+    table_html = f"""
+    <div style='overflow-x: auto; background: #ffffff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 4px solid #00b36b;'>
+        <table style='width: 100%; border-collapse: collapse; font-size: 14px;'>
+            <thead style='background: #0a1628; color: #ffffff;'>
+                <tr>{headers}</tr>
+            </thead>
+            <tbody>
+                {''.join(rows)}
+            </tbody>
+        </table>
+    </div>
+    """
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
+def create_gauge_chart(probability: float, district: str) -> go.Figure:
+    """Create a circular gauge chart for probability display."""
+    probability_pct = probability * 100
+    
+    if probability >= 0.60:
+        gauge_color = "#e63946"
+        risk_text = "HIGH RISK"
+    elif probability >= 0.35:
+        gauge_color = "#f4a261"
+        risk_text = "MEDIUM RISK"
+    else:
+        gauge_color = "#2a9d8f"
+        risk_text = "LOW RISK"
+    
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=probability_pct,
+        domain={"x": [0, 1], "y": [0, 1]},
+        title={"text": f"Outbreak Probability", "font": {"size": 16, "color": "#0a1628"}},
+        number={"suffix": "%", "font": {"size": 32, "color": "#0a1628"}},
+        gauge={
+            "axis": {"range": [0, 100], "tickcolor": "#0a1628"},
+            "bar": {"color": gauge_color},
+            "steps": [
+                {"range": [0, 35], "color": "#f0f4f8"},
+                {"range": [35, 60], "color": "#f0f4f8"},
+                {"range": [60, 100], "color": "#f0f4f8"},
+            ],
+            "threshold": {
+                "line": {"color": "red", "width": 4},
+                "thickness": 0.75,
+                "value": 90,
+            },
+        },
+    ))
+    
+    fig.update_layout(
+        height=300,
+        margin=dict(l=20, r=20, t=80, b=20),
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font={"family": "sans-serif", "color": "#0a1628"},
+    )
+    
+    return fig
+
+
+def page_overview(df: pd.DataFrame, models: dict) -> None:
+    """Render the Overview page."""
+    render_header_banner(
+        "FMD Early Warning System",
+        "Climate-Informed · Explainable · Uncertainty-Aware",
+        "Sri Lanka · 25 Districts · 2017–2024",
+    )
+    
+    # Key metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        render_stat_card("Districts Monitored", "25", "#00b36b")
+    with col2:
+        render_stat_card("Outbreak Recall", "91.8%", "#00b36b")
+    with col3:
+        render_stat_card("Model Confidence", "85.7%", "#00b36b")
+    with col4:
+        render_stat_card("Training Data", "8 Years", "#00b36b")
+    
+    st.markdown("")
+    render_section_header("📊 Two-Stage Prediction Pipeline")
+    
+    # Pipeline visualization
+    pipeline_html = """
+    <div style='display: flex; align-items: center; gap: 12px; margin-bottom: 24px; overflow-x: auto;'>
+        <div class='pipeline-step'>🌧️ Climate Data<br><small>Rainfall · Humidity · Temp · Livestock</small></div>
+        <div class='pipeline-arrow'>→→</div>
+        <div class='pipeline-step'>Stage 1: Outbreak?<br><small>Logistic Regression · Recall 91.8%</small></div>
+        <div class='pipeline-arrow'>→→</div>
+        <div class='pipeline-step'>Stage 2: Severity?<br><small>Random Forest · LOYO Validated</small></div>
+        <div class='pipeline-arrow'>→→</div>
+        <div class='pipeline-step'>⚠️ Early Warning<br><small>Risk Level · Severity · Interval</small></div>
+    </div>
+    """
+    st.markdown(pipeline_html, unsafe_allow_html=True)
+    
+    st.markdown("")
+    render_section_header("🔍 Key Findings")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(
+            """
+            <div class='card-finding finding-blue'>
+                <h4 style='margin: 0 0 8px 0; color: #0a1628;'>🌙 Peak Season</h4>
+                <p style='margin: 0; font-size: 14px; color: #555;'>
+                    NE Monsoon (Dec–Feb) accounts for 50% of all outbreaks. High moisture and cooler temperatures favor virus survival.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+    with col2:
+        st.markdown(
+            """
+            <div class='card-finding finding-green'>
+                <h4 style='margin: 0 0 8px 0; color: #0a1628;'>🐃 Livestock Driver</h4>
+                <p style='margin: 0; font-size: 14px; color: #555;'>
+                    Buffalo density is the strongest severity predictor. Higher stocking rates increase viral transmission.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+    with col3:
+        st.markdown(
+            """
+            <div class='card-finding finding-red'>
+                <h4 style='margin: 0 0 8px 0; color: #0a1628;'>📍 High Risk Zones</h4>
+                <p style='margin: 0; font-size: 14px; color: #555;'>
+                    Batticaloa · Ampara · Anuradhapura · Kurunegala show consistently elevated baseline risk.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+    st.markdown("")
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+    with col_btn2:
+        if st.button("→ Start Risk Prediction", use_container_width=True, type="primary"):
+            st.session_state.page = "Risk Prediction"
+            st.rerun()
+    
+    st.markdown("")
+    st.markdown(
+        "<p style='text-align: center; font-size: 12px; color: #999; margin-top: 40px;'>"
+        "Data sources: DAPH Annual Reports | CHIRPS Rainfall | NASA POWER Climate | FAO GLW Livestock<br>"
+        "Model: Two-Stage Logistic Regression + Random Forest | SHAP Explainability<br>"
+        "Research Component - IT22221414 - Kumarasinghe S.S | 2026"
+        "</p>",
+        unsafe_allow_html=True,
+    )
+
+
+def page_risk_prediction(df: pd.DataFrame, models: dict, stage1_shap_df: pd.DataFrame, stage2_shap_df: pd.DataFrame, bootstrap_intervals_df: pd.DataFrame) -> None:
+    """Render the Risk Prediction page."""
+    render_header_banner(
+        "🎯 District Risk Prediction",
+        "Select a district and time period for outbreak assessment",
+    )
+    
+    # Input controls
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        selected_district = st.selectbox("District", DISTRICTS, label_visibility="collapsed")
+    with col2:
+        selected_month_name = st.selectbox("Month", MONTH_NAMES, label_visibility="collapsed")
+    with col3:
+        selected_year = st.selectbox("Year", list(range(2017, 2025)), index=7, label_visibility="collapsed")
+    
+    month_num = MONTH_NAMES.index(selected_month_name) + 1
+    
+    if st.button("⚡ Predict FMD Risk", use_container_width=True, type="primary"):
         stage1_features = list(models["stage1_features"])
         stage2_features = list(models["stage2_features"])
-
+        
         feature_row, fallback_msg = get_feature_row(
             df=df,
             district=selected_district,
@@ -408,18 +838,18 @@ def main() -> None:
             year=selected_year,
             feature_cols=stage1_features,
         )
-
+        
         if fallback_msg != "Exact match found":
-            st.info(fallback_msg)
-
+            st.info(f"ℹ️ {fallback_msg}")
+        
         for col in stage1_features:
             if col not in feature_row.columns:
                 feature_row[col] = 0.0
-
+        
         x_stage1 = feature_row[stage1_features].fillna(0.0).astype(float)
         x_stage1_scaled = models["stage1_scaler"].transform(x_stage1)
         probability = float(models["stage1_model"].predict_proba(x_stage1_scaled)[:, 1][0])
-
+        
         if probability >= 0.60:
             risk_level = "HIGH"
         elif probability >= 0.35:
@@ -427,6 +857,13 @@ def main() -> None:
         else:
             risk_level = "LOW"
 
+        if risk_level == "HIGH":
+            risk_accent = "#e63946"
+        elif risk_level == "MEDIUM":
+            risk_accent = "#f4a261"
+        else:
+            risk_accent = "#2a9d8f"
+        
         severity = "LOW"
         if probability >= 0.35:
             for col in stage2_features:
@@ -435,47 +872,59 @@ def main() -> None:
             x_stage2 = feature_row[stage2_features].fillna(0.0).astype(float)
             severity_pred = int(models["stage2_model"].predict(x_stage2)[0])
             severity = decode_severity(models["stage2_encoder"], severity_pred)
-
-        top_meta_col1, top_meta_col2, top_meta_col3 = st.columns(3)
-        top_meta_col1.metric("Selected District", selected_district)
-        top_meta_col2.metric("Selected Month/Year", f"{selected_month_name} {selected_year}")
-        top_meta_col3.metric("Data Source", "DAPH + CHIRPS + NASA POWER")
-
-        st.subheader("Stage 1 — Outbreak Risk Prediction")
-        row2_left, row2_right = st.columns([1, 1])
-
-        with row2_left:
-            st.metric("Outbreak Probability", f"{probability * 100:.1f}%")
-            st.progress(probability)
-
+        
+        st.markdown("")
+        render_section_header(f"📍 {selected_district} — {selected_month_name} {selected_year}")
+        
+        # Stage 1 results
+        st.markdown("#### Stage 1: Outbreak Probability")
+        
+        col_stage1_left, col_stage1_right = st.columns([1, 1.2])
+        
+        with col_stage1_left:
+            # Risk badge
+            risk_icon = "🔴" if risk_level == "HIGH" else ("🟠" if risk_level == "MEDIUM" else "🟢")
+            risk_text = f"{risk_icon} {risk_level} RISK"
+            
             if risk_level == "HIGH":
-                st.error("🔴 HIGH RISK — Outbreak Likely")
+                st.markdown(f"<div class='risk-badge-high'>{risk_text}</div>", unsafe_allow_html=True)
             elif risk_level == "MEDIUM":
-                st.warning("🟠 MEDIUM RISK — Elevated Risk")
+                st.markdown(f"<div class='risk-badge-medium'>{risk_text}</div>", unsafe_allow_html=True)
             else:
-                st.success("🟢 LOW RISK — Routine Monitoring")
-
-        with row2_right:
-            fig1 = build_top_shap_chart(stage1_shap_df, "Top Climate Risk Drivers")
-            st.pyplot(fig1, width='stretch')
-            plt.close(fig1)
-
+                st.markdown(f"<div class='risk-badge-low'>{risk_text}</div>", unsafe_allow_html=True)
+            
+            st.markdown("")
+            render_stat_card("Outbreak Probability", f"{probability * 100:.1f}%", risk_accent)
+        
+        with col_stage1_right:
+            gauge_fig = create_gauge_chart(probability, selected_district)
+            st.plotly_chart(gauge_fig, use_container_width=True)
+        
+        # SHAP chart for Stage 1
+        st.markdown("#### Why This Prediction?")
+        fig1 = build_top_shap_chart(stage1_shap_df, "Top Climate Risk Drivers")
+        st.pyplot(fig1, use_container_width=True)
+        plt.close(fig1)
+        
+        # Stage 2 results (if applicable)
         if probability >= 0.35:
-            st.subheader("Stage 2 — Severity Prediction")
-            row3_left, row3_right = st.columns([1, 1])
-
-            with row3_left:
-                st.metric("Predicted Severity", severity)
+            st.markdown("")
+            st.markdown("#### Stage 2: Severity Estimate")
+            
+            col_stage2_left, col_stage2_right = st.columns([1, 1])
+            
+            with col_stage2_left:
+                severity_icon = "🔴" if severity == "HIGH" else ("🟠" if severity == "MEDIUM" else "🟢")
+                st.markdown(f"<h3 style='color: #0a1628; margin: 0;'>{severity_icon} {severity}</h3>", unsafe_allow_html=True)
+                
                 if severity == "LOW":
-                    st.success("🟢 LOW Severity")
-                    st.write("Minor outbreak expected. Standard monitoring protocols apply.")
+                    st.success("Minor outbreak. Standard monitoring applies.")
                 elif severity == "MEDIUM":
-                    st.warning("🟠 MEDIUM Severity")
-                    st.write("Moderate outbreak. Targeted vaccination and surveillance recommended.")
+                    st.warning("Moderate outbreak. Targeted response recommended.")
                 else:
-                    st.error("🔴 HIGH Severity")
-                    st.write("Severe outbreak expected. Emergency response protocols required.")
-
+                    st.error("Severe outbreak. Emergency response required.")
+                
+                # Bootstrap interval
                 bootstrap_match = pd.DataFrame()
                 if not bootstrap_intervals_df.empty:
                     bootstrap_match = bootstrap_intervals_df[
@@ -483,89 +932,397 @@ def main() -> None:
                         & (bootstrap_intervals_df["year"] == selected_year)
                         & (bootstrap_intervals_df["month_num"] == month_num)
                     ]
-
+                
                 if not bootstrap_match.empty:
                     bootstrap_row = bootstrap_match.iloc[0]
                     confidence_pct = float(bootstrap_row["confidence_pct"])
-
-                    bootstrap_interval_col1, bootstrap_interval_col2 = st.columns(2)
-                    bootstrap_interval_col1.metric("95% Prediction Interval", str(bootstrap_row["interval_label"]))
-                    bootstrap_interval_col2.metric("Model Confidence", f"{confidence_pct:.0f}%")
-
-                    if confidence_pct >= 70:
-                        st.success("High confidence bootstrap estimate")
-                    elif confidence_pct >= 50:
-                        st.warning("Moderate confidence bootstrap estimate")
-                    else:
-                        st.error("Low confidence bootstrap estimate")
+                    
+                    st.markdown("")
+                    st.markdown("**95% Prediction Interval**")
+                    render_stat_card("95% Prediction Interval", str(bootstrap_row["interval_label"]), "#f4a261")
+                    render_stat_card("Model Confidence", f"{confidence_pct:.0f}%", "#2a9d8f" if confidence_pct >= 70 else ("#f4a261" if confidence_pct >= 50 else "#e63946"))
                 else:
-                    st.info("Bootstrap interval not available for this selection")
-
-            with row3_right:
+                    st.info("Bootstrap interval not available for this selection.")
+            
+            with col_stage2_right:
                 fig2 = build_top_shap_chart(stage2_shap_df, "Top Severity Drivers")
-                st.pyplot(fig2, width='stretch')
+                st.pyplot(fig2, use_container_width=True)
                 plt.close(fig2)
-
-        st.subheader("Recommendation")
-
+        
+        # Recommendation box
+        st.markdown("")
+        st.markdown("#### 🎯 Recommended Action")
+        
         if risk_level == "HIGH" and severity == "HIGH":
-            st.error(
+            st.markdown(
                 """
-EMERGENCY RESPONSE REQUIRED
-- Immediately notify DAPH Animal Health Division
-- Activate emergency vaccination campaign
-- Impose movement restrictions on livestock
-- Deploy rapid response veterinary teams
-- Isolate affected farms within 24 hours
-"""
+                <div class='card-content recommendation-high' style='border-left-width: 6px;'>
+                    <h4 style='color: #e63946; margin: 0 0 12px 0;'>🚨 EMERGENCY RESPONSE REQUIRED</h4>
+                    <ul style='margin: 0; padding-left: 20px;'>
+                        <li>Immediately notify DAPH Animal Health Division</li>
+                        <li>Activate emergency vaccination campaign</li>
+                        <li>Impose movement restrictions on livestock</li>
+                        <li>Deploy rapid response veterinary teams</li>
+                        <li>Isolate affected farms within 24 hours</li>
+                    </ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
         elif risk_level == "HIGH" and severity == "MEDIUM":
-            st.warning(
+            st.markdown(
                 """
-TARGETED RESPONSE REQUIRED
-- Alert district veterinary surgeons
-- Begin targeted vaccination in high-risk areas
-- Increase farm surveillance frequency
-- Prepare movement restriction protocols
-"""
+                <div class='card-content recommendation-medium' style='border-left-width: 6px;'>
+                    <h4 style='color: #f4a261; margin: 0 0 12px 0;'>⚠️ TARGETED RESPONSE REQUIRED</h4>
+                    <ul style='margin: 0; padding-left: 20px;'>
+                        <li>Alert district veterinary surgeons</li>
+                        <li>Begin targeted vaccination in high-risk areas</li>
+                        <li>Increase farm surveillance frequency</li>
+                        <li>Prepare movement restriction protocols</li>
+                    </ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
         elif risk_level == "HIGH" and severity == "LOW":
-            st.warning(
+            st.markdown(
                 """
-ELEVATED MONITORING REQUIRED
-- Increase surveillance frequency
-- Prepare vaccination supplies
-- Monitor livestock movement
-- Alert local veterinary officers
-"""
+                <div class='card-content recommendation-medium' style='border-left-width: 6px;'>
+                    <h4 style='color: #f4a261; margin: 0 0 12px 0;'>📋 ELEVATED MONITORING REQUIRED</h4>
+                    <ul style='margin: 0; padding-left: 20px;'>
+                        <li>Increase surveillance frequency</li>
+                        <li>Prepare vaccination supplies</li>
+                        <li>Monitor livestock movement</li>
+                        <li>Alert local veterinary officers</li>
+                    </ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
         elif risk_level == "MEDIUM":
-            st.info(
+            st.markdown(
                 """
-INCREASED SURVEILLANCE RECOMMENDED
-- Standard monitoring with increased frequency
-- Review vaccination records in district
-- Monitor climate conditions closely
-"""
+                <div class='card-content' style='border-left-width: 6px; border-left-color: #f4a261;'>
+                    <h4 style='color: #0a1628; margin: 0 0 12px 0;'>📊 INCREASED SURVEILLANCE RECOMMENDED</h4>
+                    <ul style='margin: 0; padding-left: 20px;'>
+                        <li>Standard monitoring with increased frequency</li>
+                        <li>Review vaccination records in district</li>
+                        <li>Monitor climate conditions closely</li>
+                    </ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
         else:
-            st.success(
+            st.markdown(
                 """
-ROUTINE MONITORING
-- Standard surveillance protocols apply
-- No immediate intervention required
-- Continue regular farm visits
-"""
+                <div class='card-content' style='border-left-width: 6px; border-left-color: #2a9d8f;'>
+                    <h4 style='color: #0a1628; margin: 0 0 12px 0;'>✅ ROUTINE MONITORING</h4>
+                    <ul style='margin: 0; padding-left: 20px;'>
+                        <li>Standard surveillance protocols apply</li>
+                        <li>No immediate intervention required</li>
+                        <li>Continue regular farm visits</li>
+                    </ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
-        st.divider()
-        st.caption("Data sources: DAPH Annual Reports | CHIRPS Rainfall | NASA POWER Climate | FAO GLW Livestock")
-        st.caption("Model: Two-Stage Logistic Regression + Random Forest | SHAP Explainability")
-        st.caption("Research Component - IT22221414 - Kumarasinghe S.S | 2026")
+
+def page_district_forecast(df: pd.DataFrame, models: dict) -> None:
+    """Render the District Forecast page."""
+    render_header_banner(
+        "🗺️ All-District Risk Forecast",
+        "Climatological baseline risk for all 25 districts across 2026",
+    )
     
-    # ─── TAB 2: Climatological Forecast ────────────────────────────────────────
-    with tab2:
-        render_forecast_tab(df, models, DISTRICTS)
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col1:
+        selected_month_name = st.selectbox("Month", MONTH_NAMES, index=0, label_visibility="collapsed")
+    with col2:
+        selected_year = st.selectbox("Year", list(range(2025, 2031)), index=1, label_visibility="collapsed")
+    with col3:
+        pass
+    
+    target_month = MONTH_NAMES.index(selected_month_name) + 1
+    
+    if st.button("🔄 Generate Forecast", use_container_width=True, type="primary"):
+        with st.spinner("Computing climatological forecast for all 25 districts..."):
+            forecast_df = compute_climatological_forecast(
+                df=df,
+                models=models,
+                districts=DISTRICTS,
+                target_month=target_month,
+            )
+        
+        if forecast_df.empty:
+            st.warning(f"No data available for {selected_month_name}.")
+            return
+        
+        # Summary cards
+        high_count = len(forecast_df[forecast_df["Risk Level"] == "HIGH"])
+        medium_count = len(forecast_df[forecast_df["Risk Level"] == "MEDIUM"])
+        low_count = len(forecast_df[forecast_df["Risk Level"] == "LOW"])
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            render_stat_card("🔴 HIGH Risk", str(high_count), "#e63946")
+        with col2:
+            render_stat_card("🟠 MEDIUM Risk", str(medium_count), "#f4a261")
+        with col3:
+            render_stat_card("🟢 LOW Risk", str(low_count), "#2a9d8f")
+        
+        st.markdown("")
+        render_section_header("📋 District Risk Ranking")
+        
+        # Add rank column
+        forecast_df_display = forecast_df.copy()
+        forecast_df_display.insert(0, "Rank", range(1, len(forecast_df_display) + 1))
+        
+        render_forecast_table(forecast_df_display)
+        
+        # Download button
+        csv_data = generate_forecast_csv(forecast_df)
+        st.download_button(
+            label="📥 Download Forecast as CSV",
+            data=csv_data,
+            file_name=f"fmd_forecast_{selected_month_name}_{selected_year}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+        
+        # Bar chart
+        st.markdown("")
+        render_section_header(f"📊 District Risk Ranking — {selected_month_name} {selected_year} Forecast")
+        
+        fig = go.Figure(
+            data=[
+                go.Bar(
+                    y=forecast_df_display["District"],
+                    x=forecast_df_display["Outbreak Probability (%)"],
+                    orientation="h",
+                    marker=dict(
+                        color=forecast_df_display["Risk Level"].map({
+                            "HIGH": "#e63946",
+                            "MEDIUM": "#f4a261",
+                            "LOW": "#2a9d8f",
+                        })
+                    ),
+                )
+            ]
+        )
+        fig.update_layout(
+            title="",
+            xaxis_title="Outbreak Probability (%)",
+            yaxis_title="District",
+            height=600,
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#f0f4f8",
+            font=dict(color="#0a1628"),
+            hovermode="closest",
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Select a month and year, then click 'Generate Forecast' to see the all-district risk ranking for that month.")
+
+
+def page_model_insights(stage1_shap_df: pd.DataFrame, stage2_shap_df: pd.DataFrame, bootstrap_intervals_df: pd.DataFrame) -> None:
+    """Render the Model Insights page."""
+    render_header_banner(
+        "📊 Model Performance & Explainability",
+        "Validation results · Feature importance · Uncertainty",
+    )
+    
+    # Performance Metrics Section
+    render_section_header("🎯 Model Performance Metrics")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Stage 1 — Outbreak Prediction")
+        st.markdown("*Logistic Regression · Walk-Forward Validation*")
+        
+        stage1_metrics = pd.DataFrame({
+            "Year": ["2022", "2023", "2024", "Mean"],
+            "Recall": ["88.9%", "91.7%", "94.9%", "91.8%"],
+            "ROC-AUC": ["0.692", "0.757", "0.845", "0.765"],
+            "F1": ["0.260", "0.115", "0.556", "0.310"],
+        })
+        render_html_table(stage1_metrics)
+        
+        st.markdown(
+            """
+            <div class='card-content' style='margin-top: 12px;'>
+                <strong>Key Insight:</strong> Model catches 91.8% of real outbreaks using only climate data. 
+                Recall improved from 88.9% to 94.9% — models get better with recent data.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+    with col2:
+        st.markdown("#### Stage 2 — Severity Classification")
+        st.markdown("*Random Forest · Leave-One-Year-Out*")
+        
+        stage2_metrics = pd.DataFrame({
+            "Year": ["2018", "2019", "2021", "2022", "Mean"],
+            "Accuracy": ["43.8%", "35.6%", "32.3%", "72.2%", "46.5%"],
+            "Macro F1": ["0.428", "0.389", "0.244", "0.532", "0.398"],
+            "Status": ["✅", "✅", "✅", "✅", "—"],
+        })
+        render_html_table(stage2_metrics)
+        
+        st.markdown(
+            """
+            <div class='card-content' style='margin-top: 12px;'>
+                <strong>Key Insight:</strong> Buffalo density is the strongest severity predictor — confirmed by SHAP. 
+                Sparse training data (few high-severity cases) limits accuracy.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+    # SHAP Section
+    st.markdown("")
+    render_section_header("🔍 What Drives FMD Predictions?")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Outbreak Risk Drivers (Stage 1)")
+        fig_s1 = build_top_shap_chart(stage1_shap_df, "")
+        st.pyplot(fig_s1, use_container_width=True)
+        plt.close(fig_s1)
+        
+        st.markdown(
+            """
+            <div class='card-content'>
+                <h5 style='color: #0a1628; margin: 0 0 8px 0;'>🌙 cos_month (0.596)</h5>
+                <p style='margin: 0; font-size: 13px;'>January and December are peak outbreak months. NE Monsoon season drives highest risk.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
+            <div class='card-content'>
+                <h5 style='color: #0a1628; margin: 0 0 8px 0;'>🌧️ r3h (0.556)</h5>
+                <p style='margin: 0; font-size: 13px;'>3-month cumulative rainfall. Wet conditions favor virus survival and transmission.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
+            <div class='card-content'>
+                <h5 style='color: #0a1628; margin: 0 0 8px 0;'>📍 lat (0.316)</h5>
+                <p style='margin: 0; font-size: 13px;'>Northern districts at higher baseline risk. Geographic location is a key factor.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+    with col2:
+        st.markdown("#### Severity Drivers (Stage 2)")
+        fig_s2 = build_top_shap_chart(stage2_shap_df, "")
+        st.pyplot(fig_s2, use_container_width=True)
+        plt.close(fig_s2)
+        
+        st.markdown(
+            """
+            <div class='card-content'>
+                <h5 style='color: #0a1628; margin: 0 0 8px 0;'>🐃 buffalo_density (0.054)</h5>
+                <p style='margin: 0; font-size: 13px;'>Districts with more buffalo experience more severe outbreaks. Key transmission vector.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
+            <div class='card-content'>
+                <h5 style='color: #0a1628; margin: 0 0 8px 0;'>📍 lat (0.048)</h5>
+                <p style='margin: 0; font-size: 13px;'>Northern/Eastern dry zone districts consistently have higher severity outbreaks.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
+            <div class='card-content'>
+                <h5 style='color: #0a1628; margin: 0 0 8px 0;'>💨 wind_speed (0.024)</h5>
+                <p style='margin: 0; font-size: 13px;'>Wind patterns affect how far the virus spreads aerially between farms.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+    # Bootstrap Uncertainty Section
+    st.markdown("")
+    render_section_header("📈 Prediction Confidence & Uncertainty")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        render_stat_card("Mean Model Confidence", "85.7%", "#00b36b")
+    with col2:
+        render_stat_card("Interval Coverage Rate", "63.6%", "#00b36b")
+    with col3:
+        render_stat_card("High Confidence Predictions", "74.8%", "#00b36b")
+    
+    st.markdown("")
+    
+    # Bootstrap interval distribution (pie chart)
+    fig_pie = go.Figure(data=[go.Pie(
+        labels=["Narrow [X,X]", "Medium [LOW,MED]", "Wide [LOW,HIGH]"],
+        values=[76, 171, 59],
+        marker=dict(colors=["#2a9d8f", "#f4a261", "#e63946"]),
+    )])
+    fig_pie.update_layout(
+        title="Bootstrap Interval Width Distribution",
+        height=350,
+        paper_bgcolor="#ffffff",
+        font=dict(color="#0a1628"),
+    )
+    st.plotly_chart(fig_pie, use_container_width=True)
+    
+    st.markdown(
+        """
+        <div class='card-content'>
+            <h5 style='color: #0a1628; margin: 0 0 8px 0;'>What This Means</h5>
+            <p style='margin: 0; font-size: 13px;'>
+                <strong>Narrow intervals</strong> indicate high model certainty — prediction is stable.
+                <strong>Wide intervals</strong> suggest outcome could vary substantially — veterinary officers should prepare for range.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def main() -> None:
+    """Main application entry point."""
+    inject_custom_css()
+    init_session_state()
+    
+    try:
+        df = load_data()
+        models = load_models()
+        stage1_shap_df, stage2_shap_df = load_shap_values()
+        bootstrap_intervals_df = load_bootstrap_intervals()
+    except Exception as exc:
+        st.error(f"❌ Failed to load required files: {exc}")
+        return
+    
+    render_sidebar()
+    
+    # Route to appropriate page
+    if st.session_state.page == "Overview":
+        page_overview(df, models)
+    elif st.session_state.page == "Risk Prediction":
+        page_risk_prediction(df, models, stage1_shap_df, stage2_shap_df, bootstrap_intervals_df)
+    elif st.session_state.page == "District Forecast":
+        page_district_forecast(df, models)
+    elif st.session_state.page == "Model Insights":
+        page_model_insights(stage1_shap_df, stage2_shap_df, bootstrap_intervals_df)
 
 
 if __name__ == "__main__":

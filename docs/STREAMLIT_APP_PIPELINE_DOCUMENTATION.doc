@@ -1,0 +1,263 @@
+STREAMLIT APP — PIPELINE & IMPLEMENTATION DOCUMENT
+
+Date: May 10, 2026
+Project: FMD Early Warning — Streamlit App
+Author: Team (audit generated)
+
+PURPOSE
+
+This document describes the full prediction pipeline, core logic, pages, functionality, appearance guidelines, data flow, and deployment notes for the Streamlit application that implements the two-stage FMD prediction system. It maps UI components to the originating notebooks and trained models. It is intended as a single reference document for developers, analysts, and stakeholders.
+
+CONTENTS
+1. Executive summary
+2. Pipeline overview
+3. Models & artifacts
+4. Data sources and preprocessing
+5. Feature engineering and fallback strategy
+6. App pages and functionality (detailed)
+7. UI appearance and assets
+8. Implementation notes and logic flow
+9. Deployment and runtime instructions
+10. Known issues and recommendations
+11. Appendix: file list and key variables
+
+1. EXECUTIVE SUMMARY
+- The app implements a two-stage cascade:
+  - Stage 1: Outbreak probability (Logistic Regression) — 21 features, trained on 2017–2024 data.
+  - Stage 2: Severity classification (Random Forest) — tri-class LOW/MEDIUM/HIGH, triggered when Stage 1 probability ≥ 0.35.
+- SHAP explainability and bootstrap uncertainty are precomputed and displayed.
+- The app supports single-district predictions and all-district climatological forecasts.
+- Training data covers Jan 2017–Dec 2024; next forecastable month after training is Jan 2025.
+
+2. PIPELINE OVERVIEW
+- Inputs: preprocessed feature CSV (FMD_model_ready_main refined_final_dataset.csv), SHAP CSVs, bootstrap intervals CSV, serialized model files.
+- Processing steps:
+  1. Load data and model artifacts (cached resources).
+  2. Resolve a feature row for the requested (district, month, year) using cascading fallback.
+  3. Preprocess features: Stage 1 features scaled with saved `StandardScaler`; Stage 2 uses raw features (tree-based).
+  4. Run Stage 1 -> probability. Classify risk using thresholds (≥0.60 HIGH, ≥0.35 MEDIUM, else LOW).
+  5. If probability ≥0.35, run Stage 2 and decode severity (0=LOW,1=MEDIUM,2=HIGH).
+  6. Display SHAP drivers, bootstrap intervals (if available), recommendations, and visualizations.
+
+3. MODELS & ARTIFACTS
+- `models/stage1_lr_model.pkl` — sklearn LogisticRegression
+- `models/stage1_scaler.pkl` — sklearn StandardScaler
+- `models/stage1_feature_cols.pkl` — ordered list of feature names used for Stage 1
+- `models/stage2_rf_model.pkl` — sklearn RandomForestClassifier
+- `models/stage2_label_encoder.pkl` — mapping for {0: LOW,1: MEDIUM,2: HIGH}
+- `models/stage2_feature_cols.pkl` — ordered list of feature names used for Stage 2
+- `data/processed/stage1_shap_values.csv`, `stage2_shap_values.csv` — mean |SHAP| per feature
+- `data/processed/bootstrap_intervals.csv` — interval labels and confidence percentage per district-year-month
+
+4. DATA SOURCES & PREPROCESSING
+- Primary merged dataset: `FMD_model_ready_main refined_final_dataset.csv` (2017–2024).
+- Core preprocessing performed in Notebook `02_Data_Preprocessing_and_Feature_Engineering.ipynb`:
+  - Missing values filled using district-month medians; if unavailable, district medians; else global medians.
+  - Temporal features: `sin_month = sin(2π * month / 12)`, `cos_month = cos(2π * month / 12)`.
+  - Monsoon encoding: four binary monsoon-phase columns (one-hot).
+  - Rolling rainfall features and climate anomalies computed in notebook.
+- Note: Streamlit currently uses cascading fallback for missing rows. Recommendation: use medians computed during preprocessing rather than filling with 0.0.
+
+5. FEATURE ENGINEERING & FALLBACK STRATEGY
+- Stage 1 feature list (21 features) includes: rolling rainfall (r1h,r2h,r3h), humidity, temp, temp_anom, wind speed, sin_month, cos_month, monsoon one-hot flags, lat, lon, livestock densities, etc.
+- Feature order must match `stage1_feature_cols.pkl` and `stage2_feature_cols.pkl`.
+- Fallback strategy (app): exact match (district,month,year) -> latest year for month -> district median -> global median. Missing-value filling currently uses 0.0 in some places — change to precomputed medians recommended.
+
+6. APP PAGES & FUNCTIONALITY (DETAILED)
+- Navigation: Sidebar buttons set `st.session_state.page`. Four primary pages:
+  A. Overview
+     - Banner, pipeline illustration, key metrics cards (25 districts, recall, bootstrap confidence, years), summary findings, start button.
+     - Metrics are sourced from notebooks and presented as static values (can be made dynamic later).
+  B. Risk Prediction (Single District)
+     - Inputs: `district` selectbox, `month` selectbox, `year` selectbox.
+     - Actions:
+       1. Resolve features via `get_feature_row()`.
+       2. Scale Stage 1 features and compute `prob_outbreak` with `stage1_lr_model`.
+       3. Render probability gauge (Plotly) and risk badge using thresholds (≥0.60 HIGH, ≥0.35 MEDIUM).
+       4. If `prob_outbreak >= 0.35` then run `stage2_rf_model` and decode severity via `stage2_label_encoder`.
+       5. Show SHAP bar charts for Stage 1 and Stage 2 (top 8 features), bootstrap interval card (if available), and actionable recommendation box.
+     - Outputs: probability, risk, severity (conditional), SHAP drivers, bootstrap interval and confidence.
+  C. District Forecast (All Districts)
+     - Inputs: `month` (Jan–Dec), `year` selector (app allows 2025+ for climatological forecasts).
+     - Actions:
+       1. For each district, compute climatological mean of features for target month across all years (2017–2024).
+       2. Override seasonal features (`sin_month`, `cos_month`) for the target month.
+       3. Run Stage 1 (and Stage 2 if prob ≥ 0.35) for all districts and aggregate results.
+       4. Render summary stat cards (counts of HIGH/MEDIUM/LOW), ranked table, horizontal bar chart, and CSV download.
+     - Notes: This is extrapolative for months/years beyond training data; interpret results with caution.
+  D. Model Insights
+     - Presents Stage 1 and Stage 2 performance tables (walk-forward and LOYO results), SHAP bar charts, bootstrap summary, and distribution pie chart.
+     - Values are currently hardcoded from notebooks; option to automatically re-load if notebooks are regenerated.
+
+6a. DETAILED PAGE CONTENTS, TEXT COMPONENTS, AND PREDICTABLE YEARS
+
+Overview Page
+- Page title / header: "FMD Early Warning System — Sri Lanka"
+- Subheader / description text: "Two-stage climate-driven early warning for Foot-and-Mouth Disease (FMD)." 
+- Banner tagline: "Predict. Explain. Act."
+- Stat cards (4):
+  - Card 1 title: "Districts Covered"
+  - Card 1 value text: "25"
+  - Card 2 title: "Stage 1 Mean Recall"
+  - Card 2 value text: "91.8%"
+  - Card 3 title: "Mean Model Confidence"
+  - Card 3 value text: "85.7%"
+  - Card 4 title: "Training Years"
+  - Card 4 value text: "2017–2024"
+- Pipeline steps text (4 boxes):
+  - "1. Data & Features"
+  - "2. Stage 1 — Outbreak Probability"
+  - "3. Stage 2 — Severity Classification"
+  - "4. Recommendations & Action"
+- Key findings cards (3) with headings and body text examples:
+  - Heading: "Peak Season"
+    Body: "NE monsoon months show the highest outbreak probability across districts."
+  - Heading: "Primary Driver"
+    Body: "3-month rainfall accumulation is the strongest Stage 1 driver."
+  - Heading: "Severity Risk Zones"
+    Body: "Eastern and Northern districts have higher severity risk due to buffalo density."
+- CTA button text: "Start Risk Prediction"
+
+Risk Prediction (Single District) Page
+- Page title: "Single-District Risk Prediction"
+- Inputs and selectors with labels:
+  - `district` selectbox label: "Select District"
+  - `month` selectbox label: "Select Month"
+  - `year` selectbox label: "Select Year"
+  - Predict button text: "🔍 Run Prediction" or "Generate Prediction"
+- Feature sourcing note text: "Features resolved from historical dataset; missing values use cascading fallback." 
+- Stage 1 outputs and text components:
+  - Gauge title: "Outbreak Probability"
+  - Probability caption: "Probability of outbreak in the selected month"
+  - Risk badge text values: "HIGH RISK", "MEDIUM RISK", "LOW RISK"
+  - Risk thresholds explanation: "HIGH ≥ 60% • MEDIUM ≥ 35% • LOW < 35%"
+- Stage 1 SHAP area:
+  - Section header: "Stage 1 — Top Drivers"
+  - Chart caption: "Top 8 features by mean |SHAP|"
+- Stage 2 conditional block (shown when prob ≥ 0.35):
+  - Section header: "Stage 2 — Severity Prediction"
+  - Severity label text: "Predicted Severity: {LOW | MEDIUM | HIGH}"
+  - Severity explanation: "Severity classes derived from DAPH severity scoring (LOW/MEDIUM/HIGH)."
+- Bootstrap / Uncertainty card:
+  - Card title: "Bootstrap Interval"
+  - Card body template: "Interval: {LOW-MEDIUM} • Confidence: {82.3}%"
+  - Fallback text when not available: "Bootstrap interval not available for this selection."
+- Recommendation box texts (examples):
+  - High/High: "🚨 HIGH RISK & HIGH SEVERITY — Immediate localized vaccination and movement controls recommended."
+  - High/Medium: "⚠️ HIGH RISK — Increase surveillance and prepare response teams."
+  - Medium: "📊 MEDIUM RISK — Increased surveillance and targeted outreach."
+  - Low: "✅ LOW RISK — Routine monitoring."
+
+District Forecast (All Districts) Page
+- Page title: "All-District Climatological Forecast"
+- Inputs and selectors:
+  - `month` selectbox label: "Select Month"
+  - `year` selectbox label: "Select Year (climatological)"
+  - Generate button: "🔄 Generate Forecast"
+- Informational note text: "Forecasts for years beyond 2024 are climatological extrapolations using historical monthly averages (2017–2024). Interpret with caution."
+ - Informational note text: "Forecasts for years beyond 2024 are climatological extrapolations using historical monthly averages (2017–2024). Interpret with caution."
+ - Note: "The District Forecast page supports month-by-month forecasts for 2026 and later for every district (these are climatological extrapolations computed per district and per month)."
+- Summary stat cards (counts):
+  - "High risk districts: {N}"
+  - "Medium risk districts: {N}"
+  - "Low risk districts: {N}"
+- Ranked table column headers: "Rank | District | Probability (%) | Risk Level | Severity"
+- Table footnote: "Row colors: red = HIGH, orange = MEDIUM, green = LOW"
+- CSV download button text: "Download Forecast CSV"
+
+Model Insights Page
+- Page title: "Model Insights & Explainability"
+- Section: "Stage 1 Performance"
+  - Table headers: "Year | Recall | ROC-AUC | F1"
+  - Summary phrase: "Stage 1 recall (mean): 91.8%"
+- Section: "Stage 2 Performance"
+  - Table headers: "Year | Accuracy | Macro F1"
+  - Summary phrase: "Stage 2 accuracy (mean): 46.5%"
+- SHAP sections:
+  - "Stage 1 — SHAP Drivers" (chart + short interpretation bullets)
+  - "Stage 2 — SHAP Drivers" (chart + short interpretation bullets)
+- Bootstrap summary section texts:
+  - "Mean model confidence: 85.7%"
+  - "Interval coverage rate: 63.6%"
+  - Pie chart legend: "Narrow | Medium | Wide"
+- Export / reproducibility note: "All SHAP and bootstrap summaries are precomputed; re-run notebooks to regenerate."
+
+All Text Components (global / repeated UI strings)
+- App title: "FMD Early Warning System — Sri Lanka"
+- Footer credit: "Built by Research Component Team — Data: DAPH, CHIRPS, GLW, NASA POWER"
+- Loading placeholders: "Loading models...", "Loading data..."
+- Error messages (examples):
+  - "Model artifact not found — please ensure models/ contains trained models."
+  - "Features not available for this selection — using district medians."
+- Configuration keys shown in UI (if present):
+  - "Stage 1 medium threshold: 0.35"
+  - "Stage 1 high threshold: 0.60"
+
+Predictable Years (what can be predicted and how)
+- Historical predictions (direct inference): Years contained in training data: **2017–2024** — predictions for these years use exact historical rows when available.
+- Immediate next forecast month after training end: **January 2025** is the first chronological month not present in data and thus the first forward forecast month.
+- Climatological extrapolations (allowed in app): **2025 onward** (app supports selecting future years, e.g., 2025–2030) — these are computed using historical monthly averages for the target month (2017–2024) and overriding seasonal features (sin/cos, monsoon). Use these as extrapolations, not model retraining.
+- Recommended practice: Use direct historical predictions for 2017–2024; use climatological forecasts for 2025+ and clearly label them as extrapolations in UI.
+
+7. UI APPEARANCE & ASSETS
+- Global theme: dark navy primary background with vibrant accents.
+  - Primary background: #0a1628 (dark navy)
+  - Positive accent: #00b36b (green)
+  - Alert accent: #e63946 (red)
+  - Neutral card: #0f263b with white text or light gray as needed
+- Header: gradient banner with large title and short description.
+- Stat cards: custom HTML cards (replace `st.metric`) with label, value, small delta area.
+- Gauge chart: Plotly circular gauge for outbreak probability with color ranges matching risk thresholds.
+- Tables: HTML-styled table (replaces `st.dataframe`) with row color striping by risk level (red/orange/green).
+- SHAP charts: matplotlib horizontal bar charts (top 8 features) with muted backgrounds and bold labels.
+- Responsiveness: layout uses Streamlit columns; ensure components have `use_container_width=True`.
+
+8. IMPLEMENTATION NOTES & LOGIC FLOW
+- Model loading: use `@st.cache_resource` to load pickled models and scalers once per session.
+- Data loading: use `@st.cache_data` for CSV reads.
+- Prediction sequence (single district):
+  1. `row = get_feature_row(df, district, month, year, feature_cols)`
+  2. `X = row[stage1_feature_cols].values.reshape(1,-1)`
+  3. `X_scaled = stage1_scaler.transform(X)`
+  4. `prob = stage1_lr_model.predict_proba(X_scaled)[0,1]`
+  5. `risk = 'HIGH' if prob >= 0.6 else ('MEDIUM' if prob >= 0.35 else 'LOW')`
+  6. If `prob >= 0.35`:
+     - `X2 = row[stage2_feature_cols].values.reshape(1,-1)`
+     - `pred = stage2_rf_model.predict(X2)[0]`
+     - `severity = label_encoder.inverse_transform([pred])[0]` (if encoder is sklearn) or use mapping dict.
+- SHAP: load precomputed CSV and take top 8 by `mean_abs_shap` to display.
+- Bootstrap intervals: lookup by `(district, year, month_num)`; if present, show interval label and `confidence_pct`.
+
+9. DEPLOYMENT & RUNNING
+- Requirements: use `app/requirements.txt` (ensure `plotly`, `streamlit`, `pandas`, `scikit-learn`, `joblib`, `shap`, `matplotlib` present).
+- Run locally (venv activated):
+  ```powershell
+  cd D:\Projects\Research_Component
+  .venv\Scripts\Activate.ps1
+  streamlit run app/streamlit_app.py --server.port 8501
+  ```
+- Docker: create Dockerfile with base image `python:3.10-slim`, copy repo, install requirements, expose 8501, run `streamlit run ...`.
+- CI/CD: if models or SHAP/Bootstrap CSVs are regenerated, add an update job to copy artifacts into `models/` and `data/processed/` and restart app.
+
+10. KNOWN ISSUES & RECOMMENDATIONS
+- HIGH priority: Replace any `fillna(0.0)` behavior in `get_feature_row()` with medians computed in preprocessing (`data/processed`), to match notebook approach and avoid biased predictions.
+- LOW priority: Document the choice of Stage 2 trigger threshold (`0.35`) and consider parameterizing it via app configuration.
+- Optionally make the Insights metrics tables dynamic by loading a `metrics_summary.json` generated by notebooks.
+
+11. APP FILES & KEY VARIABLES (APP-FOCUSED)
+- `app/streamlit_app.py` — main app file
+- `app/requirements.txt` — dependency list
+- `models/` — directory with pickled model artifacts
+- `data/processed/` — CSVs used by app (`FMD_model_ready_main refined_final_dataset.csv`, `stage1_shap_values.csv`, `stage2_shap_values.csv`, `bootstrap_intervals.csv`)
+- Key config variables in app:
+  - `MODEL_DIR` — path to `models/`
+  - `DATA_PATH` — path to processed CSV
+  - `BOOTSTRAP_INTERVALS_PATH` — path to intervals CSV
+  - `STAGE1_THRESHOLD_MEDIUM = 0.35`
+  - `STAGE1_THRESHOLD_HIGH = 0.60`
+
+APPENDIX: QUICK CHECKLIST FOR UPDATES
+- If you re-run notebooks and retrain models: update `models/` with new `.pkl` files and update the `data/processed/` CSVs; restart app.
+- If you change feature set or order: regenerate `stage1_feature_cols.pkl` and `stage2_feature_cols.pkl` and verify feature order in app.
+
+END OF DOCUMENT
